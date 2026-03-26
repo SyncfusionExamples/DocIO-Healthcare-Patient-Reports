@@ -1,0 +1,810 @@
+﻿@{
+    ViewData["Title"] = "Patient Report";
+}
+
+<style>
+    html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        min-height: 100vh;
+        position: static !important;
+    }
+
+    body {
+        background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 50%, #0891b2 100%);
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        margin-bottom: 0 !important;
+    }
+
+    *, *::before, *::after {
+        box-sizing: border-box;
+    }
+
+    header nav.navbar {
+        margin-bottom: 0 !important;
+    }
+
+    .hero-section {
+        text-align: center;
+        padding: 60px 20px 40px;
+        color: white;
+    }
+
+    .hero-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(255, 255, 255, 0.2);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        padding: 8px 20px;
+        border-radius: 50px;
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 20px;
+        animation: fadeInDown 0.6s ease;
+    }
+
+    .hero-title {
+        font-size: 48px;
+        font-weight: 800;
+        margin-bottom: 15px;
+        text-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        animation: fadeInDown 0.8s ease;
+    }
+
+    .hero-subtitle {
+        font-size: 18px;
+        opacity: 0.95;
+        max-width: 600px;
+        margin: 0 auto 30px;
+        line-height: 1.6;
+        animation: fadeInUp 1s ease;
+    }
+
+    .hero-stats {
+        display: flex;
+        justify-content: center;
+        gap: 40px;
+        margin-top: 30px;
+        animation: fadeInUp 1.2s ease;
+    }
+
+    .stat-item {
+        text-align: center;
+    }
+
+        .stat-item .stat-number {
+            font-size: 32px;
+            font-weight: 700;
+            display: block;
+        }
+
+        .stat-item .stat-label {
+            font-size: 13px;
+            opacity: 0.9;
+            margin-top: 5px;
+        }
+
+    .main-container {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 0 20px 60px;
+    }
+
+    .generator-card {
+        background: white;
+        border-radius: 24px;
+        box-shadow: 0 30px 80px rgba(0, 0, 0, 0.25);
+        overflow: hidden;
+        animation: scaleIn 0.5s ease;
+    }
+
+    .card-header {
+        background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+        padding: 30px 40px;
+        position: relative;
+        overflow: hidden;
+    }
+
+        .card-header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -10%;
+            width: 300px;
+            height: 300px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+        }
+
+        .card-header::after {
+            content: '';
+            position: absolute;
+            bottom: -30%;
+            left: -5%;
+            width: 200px;
+            height: 200px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 50%;
+        }
+
+    .header-content {
+        position: relative;
+        z-index: 1;
+        color: white;
+    }
+
+    .steps-indicator {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        margin-bottom: 25px;
+    }
+
+    .step-item {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .step-number {
+        width: 40px;
+        height: 40px;
+        background: rgba(255, 255, 255, 0.2);
+        border: 2px solid rgba(255, 255, 255, 0.5);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 16px;
+        flex-shrink: 0;
+    }
+
+    .step-item.active .step-number {
+        background: white;
+        color: #0ea5e9;
+        border-color: white;
+    }
+
+    .step-text {
+        font-size: 14px;
+        font-weight: 600;
+        opacity: 0.9;
+    }
+
+    .card-body {
+        padding: 50px 40px;
+    }
+
+    .upload-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 30px;
+        margin-bottom: 40px;
+    }
+
+    .upload-card {
+        border: 3px dashed #cbd5e1;
+        border-radius: 16px;
+        padding: 30px 25px;
+        text-align: center;
+        background: #f8fafc;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+    }
+
+        .upload-card:hover {
+            border-color: #0ea5e9;
+            background: #f0f9ff;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(14, 165, 233, 0.15);
+        }
+
+        .upload-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #0ea5e9, #06b6d4);
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+        }
+
+        .upload-card:hover::before {
+            transform: scaleX(1);
+        }
+
+        .upload-card.has-file {
+            border-color: #0ea5e9;
+            border-style: solid;
+            background: #f0f9ff;
+        }
+
+    .upload-icon {
+        width: 70px;
+        height: 70px;
+        margin: 0 auto 20px;
+        background: linear-gradient(135deg, #e0f2fe, #bae6fd);
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 32px;
+        transition: all 0.3s ease;
+    }
+
+    .upload-card:hover .upload-icon {
+        transform: scale(1.1) rotate(5deg);
+    }
+
+    .upload-title {
+        font-size: 16px;
+        font-weight: 700;
+        color: #0f172a;
+        margin-bottom: 8px;
+    }
+
+    .upload-subtitle {
+        font-size: 13px;
+        color: #64748b;
+        margin-bottom: 15px;
+    }
+
+    .file-formats {
+        display: inline-flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        justify-content: center;
+        margin-bottom: 15px;
+    }
+
+        .file-formats span {
+            background: #e2e8f0;
+            color: #475569;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+    .upload-card input[type="file"] {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        cursor: pointer;
+    }
+
+    .default-file-display {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 16px;
+        background: #fff;
+        border: 2px solid #0ea5e9;
+        border-radius: 10px;
+        font-size: 13px;
+        color: #0369a1;
+        font-weight: 600;
+        margin-top: 12px;
+        box-shadow: 0 2px 8px rgba(14, 165, 233, 0.15);
+    }
+
+        .default-file-display .file-icon {
+            font-size: 16px;
+        }
+
+        .default-file-display .default-badge {
+            background: #fef3c7;
+            color: #92400e;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+    .selected-file-display {
+        display: none;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 16px;
+        background: #dcfce7;
+        border: 2px solid #86efac;
+        border-radius: 10px;
+        font-size: 13px;
+        color: #166534;
+        font-weight: 600;
+        margin-top: 12px;
+        animation: slideIn 0.3s ease;
+    }
+
+        .selected-file-display.show {
+            display: inline-flex;
+        }
+
+        .selected-file-display .check-icon {
+            font-size: 16px;
+        }
+
+        .selected-file-display .remove-btn {
+            margin-left: 8px;
+            background: #dc2626;
+            color: white;
+            border: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s ease;
+        }
+
+            .selected-file-display .remove-btn:hover {
+                background: #b91c1c;
+                transform: scale(1.1);
+            }
+
+    .output-selector {
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        border: 2px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 30px;
+        margin-bottom: 40px;
+    }
+
+    .output-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 20px;
+    }
+
+    .output-icon {
+        width: 45px;
+        height: 45px;
+        background: linear-gradient(135deg, #0ea5e9, #0284c7);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 22px;
+    }
+
+    .output-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    .output-options {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+    }
+
+    .output-option {
+        background: white;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 20px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: flex-start;
+        gap: 15px;
+    }
+
+        .output-option:hover {
+            border-color: #7dd3fc;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(14, 165, 233, 0.1);
+        }
+
+        .output-option input[type="radio"] {
+            margin-top: 3px;
+            width: 20px;
+            height: 20px;
+            accent-color: #0ea5e9;
+            cursor: pointer;
+        }
+
+        .output-option:has(input:checked) {
+            border-color: #0ea5e9;
+            background: #f0f9ff;
+        }
+
+    .option-content {
+        flex: 1;
+    }
+
+    .option-title {
+        font-size: 15px;
+        font-weight: 700;
+        color: #0f172a;
+        margin-bottom: 5px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .option-description {
+        font-size: 13px;
+        color: #64748b;
+        line-height: 1.5;
+    }
+
+    .generate-button {
+        width: 100%;
+        background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        padding: 18px;
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 10px 30px rgba(14, 165, 233, 0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+    }
+
+        .generate-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 40px rgba(14, 165, 233, 0.4);
+        }
+
+        .generate-button:active {
+            transform: translateY(0);
+        }
+
+    .error-msg {
+        margin-top: 20px;
+        padding: 15px 20px;
+        background: #fef2f2;
+        border: 2px solid #fecaca;
+        border-radius: 12px;
+        color: #dc2626;
+        font-size: 14px;
+        font-weight: 600;
+        display: none;
+        animation: shake 0.5s ease;
+    }
+
+        .error-msg:not(:empty) {
+            display: block;
+        }
+
+    .features-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        padding: 40px;
+        background: #f8fafc;
+    }
+
+    .feature-box {
+        text-align: center;
+        padding: 20px;
+    }
+
+        .feature-box .feature-icon {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #e0f2fe, #bae6fd);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin: 0 auto 12px;
+        }
+
+        .feature-box h4 {
+            font-size: 14px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 6px;
+        }
+
+        .feature-box p {
+            font-size: 12px;
+            color: #64748b;
+            line-height: 1.5;
+        }
+
+    @@keyframes fadeInDown {
+        from {
+            opacity: 0;
+            transform: translateY(-20px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@keyframes scaleIn {
+        from {
+            opacity: 0;
+            transform: scale(0.95);
+        }
+
+        to {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+
+    @@keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@keyframes shake {
+        0%, 100% {
+            transform: translateX(0);
+        }
+
+        10%, 30%, 50%, 70%, 90% {
+            transform: translateX(-5px);
+        }
+
+        20%, 40%, 60%, 80% {
+            transform: translateX(5px);
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .hero-title {
+            font-size: 32px;
+        }
+
+        .upload-grid,
+        .output-options,
+        .features-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .hero-stats {
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .card-body {
+            padding: 30px 20px;
+        }
+
+        .steps-indicator {
+            flex-direction: column;
+        }
+    }
+</style>
+
+@using (Html.BeginForm("GenerateReport", "Home", FormMethod.Post, new { enctype = "multipart/form-data" }))
+{
+    @Html.AntiForgeryToken()
+
+    <div class="hero-section">
+        <div class="hero-badge">
+            <span>🏥</span> MediReport AI-Powered Platform
+        </div>
+        <h1 class="hero-title">Patient Report Generator</h1>
+        <p class="hero-subtitle">
+            Transform your medical templates and patient data into professional PDF reports instantly.
+            Powered by Syncfusion DocIO technology.
+        </p>
+        <div class="hero-stats">
+            <div class="stat-item">
+                <span class="stat-number">⚡</span>
+                <span class="stat-label">Lightning Fast</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number">📄</span>
+                <span class="stat-label">Batch Processing</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="generator-card">
+
+            <div class="card-header">
+                <div class="header-content">
+                    <div class="steps-indicator">
+                        <div class="step-item active">
+                            <div class="step-number">1</div>
+                            <div class="step-text">Upload Template</div>
+                        </div>
+                        <div class="step-item active">
+                            <div class="step-number">2</div>
+                            <div class="step-text">Upload Data</div>
+                        </div>
+                        <div class="step-item active">
+                            <div class="step-number">3</div>
+                            <div class="step-text">Generate Report</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-body">
+                <div class="upload-grid">
+                    <div class="upload-card" id="template-card">
+                        <div class="upload-icon">📋</div>
+                        <div class="upload-title">Report Template</div>
+                        <div class="upload-subtitle">Upload your Word document template</div>
+                        <div class="file-formats">
+                            <span>.DOCX</span>
+                            <span>.DOC</span>
+                            <span>.DOTX</span>
+                            <span>.RTF</span>
+                        </div>
+                        @Html.TextBox("file", null, new { type = "file", accept = ".doc,.docx,.rtf,.dot,.dotm,.dotx,.docm", onchange = "handleFileSelect(this, 'template')" })
+
+                        <div class="default-file-display" id="default-template">
+                            <span class="file-icon">📄</span>
+                            <span>Template.docx</span>
+                            <span class="default-badge">Default</span>
+                        </div>
+
+                        <div class="selected-file-display" id="selected-template">
+                            <span class="check-icon">✓</span>
+                            <span id="template-filename"></span>
+                            <button type="button" class="remove-btn" onclick="removeFile('template')">×</button>
+                        </div>
+                    </div>
+
+                    <div class="upload-card" id="data-card">
+                        <div class="upload-icon">🗂️</div>
+                        <div class="upload-title">Patient Data</div>
+                        <div class="upload-subtitle">Upload XML file with patient records</div>
+                        <div class="file-formats">
+                            <span>.XML</span>
+                        </div>
+                        @Html.TextBox("xmlFile", null, new { type = "file", accept = ".xml", onchange = "handleFileSelect(this, 'data')" })
+
+                        <div class="default-file-display" id="default-data">
+                            <span class="file-icon">📊</span>
+                            <span>PatientDetails.xml</span>
+                            <span class="default-badge">Default</span>
+                        </div>
+
+                        <div class="selected-file-display" id="selected-data">
+                            <span class="check-icon">✓</span>
+                            <span id="data-filename"></span>
+                            <button type="button" class="remove-btn" onclick="removeFile('data')">×</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="output-selector">
+                    <div class="output-header">
+                        <div class="output-icon">⚙️</div>
+                        <div class="output-title">Choose Output Format</div>
+                    </div>
+                    <div class="output-options">
+                        <label class="output-option">
+                            <input type="radio" name="outputType" value="single" checked />
+                            <div class="option-content">
+                                <div class="option-title">
+                                    <span>📄</span> Single PDF Document
+                                </div>
+                                <div class="option-description">
+                                    Merge all patient records into one consolidated PDF report
+                                </div>
+                            </div>
+                        </label>
+                        <label class="output-option">
+                            <input type="radio" name="outputType" value="multiple" />
+                            <div class="option-content">
+                                <div class="option-title">
+                                    <span>📑</span> Multiple PDF Files
+                                </div>
+                                <div class="option-description">
+                                    Generate separate PDF for each patient record (ZIP archive)
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <button class="generate-button" type="submit">
+                    <span>🚀</span>
+                    <span>Generate Patient Report</span>
+                </button>
+
+                <div class="error-msg">@ViewBag.Message</div>
+            </div>
+
+            <div class="features-grid">
+                <div class="feature-box">
+                    <div class="feature-icon">🔄</div>
+                    <h4>Mail Merge</h4>
+                    <p>Advanced DocIO mail merge with nested group support</p>
+                </div>
+                <div class="feature-box">
+                    <div class="feature-icon">⚡</div>
+                    <h4>Fast Processing</h4>
+                    <p>Real-time document generation and conversion</p>
+                </div>
+                <div class="feature-box">
+                    <div class="feature-icon">🔒</div>
+                    <h4>Secure</h4>
+                    <p>No data storage, instant deletion after processing</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+}
+
+<script>
+    function handleFileSelect(input, type) {
+        const card = document.getElementById(type + '-card');
+        const defaultDisplay = document.getElementById('default-' + type);
+        const selectedDisplay = document.getElementById('selected-' + type);
+        const filenameElement = document.getElementById(type + '-filename');
+
+        if (input.files && input.files[0]) {
+            // Show selected file
+            filenameElement.textContent = input.files[0].name;
+            defaultDisplay.style.display = 'none';
+            selectedDisplay.classList.add('show');
+            card.classList.add('has-file');
+        } else {
+            // Show default file
+            defaultDisplay.style.display = 'inline-flex';
+            selectedDisplay.classList.remove('show');
+            card.classList.remove('has-file');
+        }
+    }
+
+    function removeFile(type) {
+        const input = document.querySelector('input[name="' + (type === 'template' ? 'file' : 'xmlFile') + '"]');
+        const card = document.getElementById(type + '-card');
+        const defaultDisplay = document.getElementById('default-' + type);
+        const selectedDisplay = document.getElementById('selected-' + type);
+
+        // Clear the file input
+        input.value = '';
+
+        // Show default file
+        defaultDisplay.style.display = 'inline-flex';
+        selectedDisplay.classList.remove('show');
+        card.classList.remove('has-file');
+    }
+</script>
