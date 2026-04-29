@@ -2,7 +2,7 @@
 <PatientDetails>
     <Patients>
       <PatientName>John Doe</PatientName>
-      <PatientMRN>MRN001</PatientMRN>
+      <PatientID>MRN001</PatientID>
       <PatientDOB>1985-06-15</PatientDOB>
       <Gender>Male</Gender>
       <BloodGroup>O+</BloodGroup>
@@ -46,14 +46,13 @@
 	  <FollowUpDate>2025-04-05</FollowUpDate>
       <FollowUpDoctor>Dr. Emily Carter</FollowUpDoctor>
       <FollowUpNotes>Follow up in pulmonology clinic. Seek care if symptoms worsen.</FollowUpNotes>
-      <ProviderName>Dr. Smith</ProviderName>
       <ProviderDesignation>Consultant Physician</ProviderDesignation>
 	  <ProviderDepartment>General Medicine</ProviderDepartment>
       <SignatureDate>2025-03-24</SignatureDate>
     </Patients>
     <Patients>
       <PatientName>Jane Miller</PatientName>
-      <PatientMRN>MRN002</PatientMRN>
+      <PatientID>MRN002</PatientID>
       <PatientDOB>1990-09-12</PatientDOB>
       <Gender>Female</Gender>
       <BloodGroup>A+</BloodGroup>
@@ -85,7 +84,6 @@
 	  <FollowUpDate>2025-04-07</FollowUpDate>
 	  <FollowUpDoctor>Dr. Laura Bennett</FollowUpDoctor>
       <FollowUpNotes>Follow-up in pulmonary clinic. Patient advised to return immediately if shortness of breath or wheezing recurs.</FollowUpNotes>
-      <ProviderName>Dr. Adams</ProviderName>
       <ProviderDesignation>Senior Consultant</ProviderDesignation>
 	  <ProviderDepartment>Pulmonology</ProviderDepartment>
       <SignatureDate>2025-03-22</SignatureDate>

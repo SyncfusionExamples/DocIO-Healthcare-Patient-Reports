@@ -711,37 +711,85 @@
                     </div>
                 </div>
 
+                <!-- REPORT TYPE SECTION -->
                 <div class="output-selector">
                     <div class="output-header">
-                        <div class="output-icon">⚙️</div>
-                        <div class="output-title">Choose Output Format</div>
+                        <div class="output-icon">🎯</div>
+                        <div class="output-title">Report Type</div>
                     </div>
                     <div class="output-options">
                         <label class="output-option">
-                            <input type="radio" name="outputType" value="single" checked />
+                            <input type="radio" name="reportType" value="all" checked />
                             <div class="option-content">
                                 <div class="option-title">
-                                    <span>📄</span> Single PDF Document
+                                    <span>📊</span> All Records
                                 </div>
                                 <div class="option-description">
-                                    Merge all patient records into one consolidated PDF report
+                                    Generate report for all patients
                                 </div>
                             </div>
                         </label>
                         <label class="output-option">
-                            <input type="radio" name="outputType" value="multiple" />
+                            <input type="radio" name="reportType" value="selective" />
                             <div class="option-content">
                                 <div class="option-title">
-                                    <span>📑</span> Multiple PDF Files
+                                    <span>🔍</span> Selective Report
                                 </div>
                                 <div class="option-description">
-                                    Generate separate PDF for each patient record (ZIP archive)
+                                    Generate report for specific patient by ID
                                 </div>
                             </div>
                         </label>
                     </div>
                 </div>
+                <div class="patient-id-section" id="patientIdSection" style="display: none; margin: 20px 0;">
+                    <div style="background: #f0f9ff; border: 2px solid #0ea5e9; border-radius: 12px; padding: 20px;">
+                        <label style="display: block; font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 10px;">
+                            🆔 Enter Patient ID
+                        </label>
+                        <input type="text" name="patientId" id="patientId" placeholder="e.g., MRN001"
+                               style="width: 100%; padding: 12px 15px; border: 2px solid #e2e8f0; border-radius: 8px;
+                              font-size: 14px; transition: all 0.3s ease; box-sizing: border-box;"
+                               onfocus="this.style.borderColor='#0ea5e9'; this.style.boxShadow='0 0 0 3px rgba(14, 165, 233, 0.1)'"
+                               onblur="this.style.borderColor='#e2e8f0'; this.style.boxShadow='none'" />
+                        <p style="font-size: 12px; color: #64748b; margin-top: 8px; margin-bottom: 0;">
+                            ⚠️ Required: Enter the Patient ID to generate the report
+                        </p>
+                    </div>
+                </div>
 
+                <!-- OUTPUT FORMAT SECTION -->
+                <div class="output-selector">
+                    <div class="output-header">
+                        <div class="output-icon">📤</div>
+                        <div class="output-title">Choose Output Format</div>
+                    </div>
+                    <div class="output-options">
+                        <label class="output-option">
+                            <input type="radio" name="outputFormat" value="single" checked />
+                            <div class="option-content">
+                                <div class="option-title">
+                                    <span>📄</span> Single PDF
+                                </div>
+                                <div class="option-description">
+                                    Generate one combined PDF document
+                                </div>
+                            </div>
+                        </label>
+                        <label class="output-option">
+                            <input type="radio" name="outputFormat" value="multiple" />
+                            <div class="option-content">
+                                <div class="option-title">
+                                    <span>📚</span> Multiple PDF Files
+                                </div>
+                                <div class="option-description">
+                                    Generate separate PDF for each record
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+                
                 <button class="generate-button" type="submit">
                     <span>🚀</span>
                     <span>Generate Patient Report</span>
@@ -780,13 +828,11 @@
         const filenameElement = document.getElementById(type + '-filename');
 
         if (input.files && input.files[0]) {
-            // Show selected file
             filenameElement.textContent = input.files[0].name;
             defaultDisplay.style.display = 'none';
             selectedDisplay.classList.add('show');
             card.classList.add('has-file');
         } else {
-            // Show default file
             defaultDisplay.style.display = 'inline-flex';
             selectedDisplay.classList.remove('show');
             card.classList.remove('has-file');
@@ -799,12 +845,40 @@
         const defaultDisplay = document.getElementById('default-' + type);
         const selectedDisplay = document.getElementById('selected-' + type);
 
-        // Clear the file input
         input.value = '';
-
-        // Show default file
         defaultDisplay.style.display = 'inline-flex';
         selectedDisplay.classList.remove('show');
         card.classList.remove('has-file');
     }
+
+    // Handle Report Type change - Show/Hide PatientID section
+    document.querySelectorAll('input[name="reportType"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            const patientIdSection = document.getElementById('patientIdSection');
+            const patientIdInput = document.getElementById('patientId');
+
+            if (this.value === 'selective') {
+                patientIdSection.style.display = 'block';
+                patientIdInput.required = true;
+                patientIdInput.focus();
+            } else {
+                patientIdSection.style.display = 'none';
+                patientIdInput.required = false;
+                patientIdInput.value = '';
+            }
+        });
+    });
+
+    // Validate form before submission
+    document.querySelector('form').addEventListener('submit', function(e) {
+        const reportType = document.querySelector('input[name="reportType"]:checked').value;
+        const patientId = document.getElementById('patientId').value.trim();
+
+        if (reportType === 'selective' && !patientId) {
+            e.preventDefault();
+            alert('⚠️ Please enter a Patient ID for selective report generation');
+            document.getElementById('patientId').focus();
+            return false;
+        }
+    });
 </script>

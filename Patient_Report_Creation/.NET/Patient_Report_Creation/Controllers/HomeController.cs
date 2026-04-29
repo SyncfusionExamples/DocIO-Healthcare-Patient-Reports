@@ -91,8 +91,14 @@ namespace Patient_Report_Creation.Controllers
             else
             {
                 // Load default file from wwwroot\Data\
-                string defaultFilePath = Path.Combine(_hostingEnvironment.WebRootPath, "Data", "Template-2.docx");
-                return new FileStream(defaultFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                string defaultFilePath = Path.Combine(_hostingEnvironment.WebRootPath, "Data", "Template.docx");
+                using (var fileStream = new FileStream(defaultFilePath, FileMode.Open, FileAccess.Read))
+                {
+                    var memoryStream = new MemoryStream();
+                    fileStream.CopyTo(memoryStream);
+                    memoryStream.Position = 0;
+                    return memoryStream;
+                }
             }
         }
 
@@ -106,176 +112,36 @@ namespace Patient_Report_Creation.Controllers
                 ViewBag.Message = "Output format is required.";
                 return View("Index");
             }
-
             using (WordDocument document = new WordDocument(stream, FormatType.Automatic))
             {
                 if (xmlStream != null && xmlStream.Length > 0)
                 {
                     bool mergeSuccess = false;
-
-                    // For selective report, filter XML for the specific patient
-                    if (reportType == "selective" && !string.IsNullOrWhiteSpace(patientId))
+                    //Determine whether PatientID should be used
+                    string effectivePatientId = reportType == "selective" ? patientId?.Trim() : null;
+                    // Generate report for all records
+                    mergeSuccess = ProcessXmlAndPerformMerge(document, xmlStream,patientId);
+                    
+                    if (!mergeSuccess)
+                        return View("Index");
+                    if (!string.IsNullOrWhiteSpace(effectivePatientId))
                     {
-                        xmlStream.Position = 0;
-                        XmlDocument masterXmlDoc = new XmlDocument();
-                        masterXmlDoc.Load(xmlStream);
-
-                        string primaryGroupName;
-                        // Filter XML to contain only the specified patient's records
-                        XmlDocument filteredXml = FilterXmlByPatientId(masterXmlDoc, patientId, out primaryGroupName);
-
-                        if (filteredXml == null || filteredXml.DocumentElement.ChildNodes.Count == 0)
-                        {
-                            ViewBag.Message = $"No data found for Patient ID: {patientId}";
-                            _logger.LogWarning($"No data found for Patient ID: {patientId}");
-                            return View("Index");
-                        }
-
-                        // Create memory stream from filtered XML
-                        using (MemoryStream filteredXmlStream = new MemoryStream())
-                        {
-                            filteredXml.Save(filteredXmlStream);
-                            filteredXmlStream.Position = 0;
-
-                            // Perform mail merge with filtered patient data
-
-                            mergeSuccess = ExecuteMailMergeUsingKnownGroup(
-                                document,
-                                filteredXmlStream,
-                                primaryGroupName);
-
-                        }
-
-                        _logger.LogInformation($"Generated selective report for Patient ID: {patientId}");
+                        _logger.LogInformation($"Generated selective report for Patient ID: {effectivePatientId}");
                     }
                     else
                     {
-                        // Generate report for all records
-                        mergeSuccess = ProcessXmlAndPerformMerge(document, xmlStream);
                         _logger.LogInformation("Generated report for all records");
                     }
-
-                    if (!mergeSuccess)
-                        return View("Index");
                 }
-
                 // Generate and return the output file based on requested format
                 return GenerateOutputFile(document, outputFormat);
             }
-        }
-        /// <summary>
-        /// Filters XML document to contain only records matching the specified PatientID.
-        /// Preserves the original XML structure and root element.
-        /// </summary>
-        private XmlDocument FilterXmlByPatientId(XmlDocument xmlDoc, string patientId, out string primaryGroupName)
-        {
-
-            primaryGroupName = null;
-
-            try
-            {
-                XmlDocument filteredDoc = new XmlDocument();
-                XmlElement masterRoot = xmlDoc.DocumentElement;
-
-                // Create new root element
-                XmlElement newRoot = filteredDoc.CreateElement(masterRoot.LocalName);
-                filteredDoc.AppendChild(newRoot);
-
-                // ✅ IMPORTANT: detect PRIMARY GROUP ONCE (before filtering)
-                var repeatingGroup = masterRoot.ChildNodes
-                    .OfType<XmlNode>()
-                    .Where(n => n.NodeType == XmlNodeType.Element)
-                    .GroupBy(n => n.LocalName)
-                    .FirstOrDefault(g => g.Count() > 1);
-
-                if (repeatingGroup == null)
-                    throw new Exception("No repeating group found in XML");
-
-                primaryGroupName = repeatingGroup.Key; // ✅ STORE GROUP NAME
-
-                // Copy root attributes
-                foreach (XmlAttribute attr in masterRoot.Attributes)
-                    newRoot.SetAttribute(attr.Name, attr.Value);
-
-                // Find group nodes (Patients)
-                XmlNodeList groupNodes = xmlDoc.GetElementsByTagName(primaryGroupName);
-                int matchCount = 0;
-
-                foreach (XmlNode groupNode in groupNodes)
-                {
-                    string nodePatientId = GetPatientIdFromNode(groupNode);
-
-                    if (!string.IsNullOrEmpty(nodePatientId) &&
-                        nodePatientId.Equals(patientId, StringComparison.OrdinalIgnoreCase))
-                    {
-                        XmlNode importedNode = filteredDoc.ImportNode(groupNode, true);
-                        newRoot.AppendChild(importedNode);
-                        matchCount++;
-                    }
-                }
-
-                if (matchCount == 0)
-                    return null;
-
-                return filteredDoc;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error filtering XML");
-                return null;
-            }
-
-        }
-
-        /// <summary>
-        /// Extracts PatientID from XML node by checking attributes or child elements.
-        /// Supports multiple PatientID naming conventions (PatientID, MRN, etc.)
-        /// </summary>
-        private string GetPatientIdFromNode(XmlNode node)
-        {
-            // Check for PatientID attribute
-            if (node.Attributes?["PatientID"] != null)
-                return node.Attributes["PatientID"].Value;
-
-            // Check for PatientID child element
-            XmlNode patientIdNode = node.SelectSingleNode("PatientID");
-            if (patientIdNode != null)
-                return patientIdNode.InnerText;
-
-            // Also check for common variations
-            patientIdNode = node.SelectSingleNode("MRN");
-            if (patientIdNode != null)
-                return patientIdNode.InnerText;
-
-            return null;
-        }
-
-        /// <summary>
-        /// Creates a ZIP file from multiple PDF files
-        /// </summary>
-        private IActionResult CreateZipFromPdfs(List<byte[]> pdfFiles, List<string> fileNames)
-        {
-            var zipStream = new MemoryStream();
-            using (var zip = new ZipArchive(zipStream, ZipArchiveMode.Create, leaveOpen: true))
-            {
-                for (int i = 0; i < pdfFiles.Count; i++)
-                {
-                    var entry = zip.CreateEntry(fileNames[i], CompressionLevel.Fastest);
-                    using (var entryStream = entry.Open())
-                    {
-                        entryStream.Write(pdfFiles[i], 0, pdfFiles[i].Length);
-                    }
-                }
-            }
-
-            zipStream.Position = 0;
-            return File(zipStream.ToArray(), "application/zip", "patient_reports.zip");
-        }
+        }      
         /// <summary>
         /// Processes XML data, detects repeating groups, and performs mail merge on the document.
         /// Returns true if merge completed successfully, false otherwise.
         /// </summary>
-        private bool ProcessXmlAndPerformMerge(WordDocument document, Stream xmlStream)
+        private bool ProcessXmlAndPerformMerge(WordDocument document, Stream xmlStream, string patientId)
         {
             try
             {
@@ -297,7 +163,7 @@ namespace Patient_Report_Creation.Controllers
                 if (repeatingGroupNode != null)
                 {
                     return ExecuteGroupMailMerge(document, repeatingGroupNode, repeatingGroupParent,
-                                                documentElement, parsedData);
+                                                documentElement, parsedData, patientId);
                 }
                 else
                 {
@@ -336,55 +202,114 @@ namespace Patient_Report_Creation.Controllers
         /// </summary>
         private bool FindRepeatingGroup(XmlNode currentNode, XmlNode parentNode, ref XmlNode repeatingGroupNode, ref XmlNode repeatingGroupParent, int maxDepth)
         {
-            // Stop recursion if depth limit is reached
             if (maxDepth <= 0)
                 return false;
 
-            // Iterate through all child nodes of the current node
+            XmlNode documentRoot = currentNode.OwnerDocument?.DocumentElement;
+
+            // ✅ STEP 1: Detect PRIMARY GROUP at this level
             foreach (XmlNode child in currentNode.ChildNodes)
             {
-                // Process only element nodes (ignore text, comments, etc.)
                 if (child.NodeType != XmlNodeType.Element)
                     continue;
-                if (currentNode.SelectNodes(child.LocalName).Count > 1)
+
+                var sameNamedSiblings =
+                    currentNode.SelectNodes(child.LocalName).Count;
+
+                // Case 1: True repetition (multiple group nodes)
+                if (sameNamedSiblings > 1)
                 {
-                    // Store the repeating element
                     repeatingGroupNode = child;
-                    // Store its parent
                     repeatingGroupParent = currentNode;
-                    // Log where the repeating group was discovered
-                    _logger.LogInformation(
-                        $"Found repeating group '{child.LocalName}' under '{currentNode.LocalName}' " +
-                        $"at depth {5 - maxDepth + 1}"
-                    );
-                    // Signal that the search is complete
+                    return true;
+                }
+                // Case 2: Single primary group with nested records
+                if (sameNamedSiblings == 1 &&
+                    currentNode == documentRoot &&
+                    ContainsRecordNode(child) &&
+                    !HasRepeatingChildren(child))
+                {
+                    repeatingGroupNode = child;
+                    repeatingGroupParent = currentNode;
+
+                    _logger.LogInformation($"Detected PRIMARY group '{child.LocalName}' under root '{currentNode.LocalName}'");
+
                     return true;
                 }
 
-                //Recursively search deeper levels.
-                //If found in a deeper call, immediately stop further traversal.
-                if (FindRepeatingGroup(currentNode: child, parentNode: currentNode, ref repeatingGroupNode, ref repeatingGroupParent, maxDepth: maxDepth - 1))
+            }
+            // ✅ STEP 2: Recurse ONLY if primary group not found
+            foreach (XmlNode child in currentNode.ChildNodes)
+            {
+                if (child.NodeType != XmlNodeType.Element)
+                    continue;
+
+                if (FindRepeatingGroup(child, currentNode, ref repeatingGroupNode, ref repeatingGroupParent, maxDepth - 1))
                 {
                     return true;
                 }
             }
-            // No repeating group found at this level
+
             return false;
         }
-
-        private bool IsLogicalGroup(XmlNode node)
+        /// <summary>
+        /// Checks recursively whether a node contains at least one record node.
+        /// Used to detect primary groups.
+        /// </summary>
+        private bool ContainsRecordNode(XmlNode node)
         {
-            // Count only element children
+            // Iterate through all child nodes of the current XML node
+            foreach (XmlNode child in node.ChildNodes)
+            {
+                // Skip non-element nodes such as text, comments, or whitespace
+                if (child.NodeType != XmlNodeType.Element)
+                    continue;
+                // Check whether the current element qualifies as a record node
+                if (IsRecordNode(child))
+                    return true;
+                // Recursively check child elements for record nodes
+                if (ContainsRecordNode(child))
+                    return true;
+            }
+            // No record node found at this level or in any descendants
+            return false;
+        }
+        /// <summary>
+        /// Determines whether the node represents a single record
+        /// (i.e., its children are fields, not other complex elements).
+        /// Example: Component, Vital, Medication
+        /// </summary>
+        private bool IsRecordNode(XmlNode node)
+        {
             var elementChildren = node.ChildNodes
                 .OfType<XmlNode>()
                 .Where(n => n.NodeType == XmlNodeType.Element)
                 .ToList();
 
-            // A logical group:
-            // 1. Has element children
-            // 2. Is NOT a simple leaf
-            return elementChildren.Count > 0 &&
-                   elementChildren.Any(c => c.HasChildNodes);
+            if (elementChildren.Count == 0)
+                return false;
+
+            // Record node = children contain only text (no nested elements)
+            return elementChildren.All(c =>
+                !c.ChildNodes
+                    .OfType<XmlNode>()
+                    .Any(n => n.NodeType == XmlNodeType.Element));
+        }
+        /// <summary>
+        /// Checks whether the given XML node has any child elements
+        /// that repeat at the same hierarchy level.
+        /// </summary>
+        private bool HasRepeatingChildren(XmlNode node)
+        {
+            // Collect only ELEMENT child nodes
+            // Group child elements by their LocalName
+            var names = node.ChildNodes
+                .OfType<XmlNode>()
+                .Where(n => n.NodeType == XmlNodeType.Element)
+                .GroupBy(n => n.LocalName);
+            // Check whether ANY group has more than one element.
+            // If yes, this node already contains a real repeating group
+            return names.Any(g => g.Count() > 1);
         }
 
 
@@ -392,7 +317,7 @@ namespace Patient_Report_Creation.Controllers
         /// Executes mail merge for documents with repeating groups (nested, grouped, or single record).
         /// </summary>
         private bool ExecuteGroupMailMerge(WordDocument document, XmlNode repeatingGroupNode,
-                                           XmlNode repeatingGroupParent, XmlNode documentElement, ExpandoObject parsedData)
+                                           XmlNode repeatingGroupParent, XmlNode documentElement, ExpandoObject parsedData, string patientId)
         {
             try
             {
@@ -403,6 +328,29 @@ namespace Patient_Report_Creation.Controllers
                 var rootDict = parsedData as IDictionary<string, object>;
                 List<ExpandoObject> groupItems = NavigateToGroup(rootDict, documentElement,
                                                                  repeatingGroupParent, groupName, documentRootName);
+
+                if (!string.IsNullOrWhiteSpace(patientId))
+                {
+                    groupItems = groupItems
+                        .Where(item =>
+                        {
+                            var dict = item as IDictionary<string, object>;
+
+                            if (dict == null) return false;
+
+                            // Match PatientID / MRN (same logic as XML version)
+                            if (dict.ContainsKey("PatientID"))
+                                return dict["PatientID"]?.ToString()
+                                    .Equals(patientId, StringComparison.OrdinalIgnoreCase) == true;
+
+                            if (dict.ContainsKey("MRN"))
+                                return dict["MRN"]?.ToString()
+                                    .Equals(patientId, StringComparison.OrdinalIgnoreCase) == true;
+
+                            return false;
+                        })
+                        .ToList();
+                }
 
                 if (groupItems == null || groupItems.Count == 0)
                 {
@@ -533,31 +481,44 @@ namespace Patient_Report_Creation.Controllers
 
             return navigationPath;
         }
+
         /// <summary>
-        /// Detects whether group items contain nested repeating groups.
+        /// Determines whether a list of group items contains nested or repeating groups.
+        /// This is used to identify hierarchical XML structures that require
+        /// nested mail merge processing instead of a simple group merge.
         /// </summary>
         private bool DetectNestedGroups(List<ExpandoObject> groupItems)
         {
+            // Iterate through each primary group item
             foreach (var item in groupItems)
             {
+                // Treat the group item as a dictionary for property access
                 var itemDict = item as IDictionary<string, object>;
-
+                // Examine each value inside the group item
                 foreach (var value in itemDict.Values)
                 {
+                    // Identify child collections represented as lists of ExpandoObject
                     if (value is List<ExpandoObject> childList)
                     {
+                        // If the child list contains more than one item,
+                        // it is a repeating group
                         if (childList.Count > 1)
                             return true;
-
+                        // If the child list contains exactly one item,
+                        // check whether that item itself contains nested lists
                         if (childList.Count == 1)
                         {
                             var nestedItem = childList[0] as IDictionary<string, object>;
+
+                            // If the nested item contains any list values,
+                            // a deeper nested group exists
                             if (nestedItem?.Values.OfType<List<ExpandoObject>>().Any() == true)
                                 return true;
                         }
                     }
                 }
             }
+            // No nested or repeating groups detected
             return false;
         }
 
@@ -569,22 +530,26 @@ namespace Patient_Report_Creation.Controllers
         {
             try
             {
+                // Convert the parsed ExpandoObject into a dictionary
                 var rootDict = parsedData as IDictionary<string, object>;
+                // Get the XML document root element name
                 string documentRootName = documentElement.LocalName;
-
+                // Validate that the parsed data contains the XML root element
                 if (!rootDict.ContainsKey(documentRootName))
                 {
                     ViewBag.Message = "XML root element not found.";
                     return false;
                 }
-
+                // Expect the root element to be represented as a list
+                // (even if it contains only one item)
                 var documentRootList = rootDict[documentRootName] as List<ExpandoObject>;
                 if (documentRootList == null || documentRootList.Count == 0)
                 {
                     ViewBag.Message = "Invalid XML structure.";
                     return false;
                 }
-
+                // Flatten nested XML structure into name/value field pairs
+                // and capture multi-item lists that are skipped
                 var rootItem = documentRootList[0] as IDictionary<string, object>;
                 var (fields, skippedLists) = FlattenRootFields(rootItem);
 
@@ -593,9 +558,10 @@ namespace Patient_Report_Creation.Controllers
                     ViewBag.Message = "No merge fields found in XML.";
                     return false;
                 }
-
+                // Extract merge field names and values
                 string[] fieldNames = fields.Keys.ToArray();
                 string[] fieldValues = fields.Values.ToArray();
+                // Execute the simple mail merge
                 document.MailMerge.Execute(fieldNames, fieldValues);
 
                 // Log results
@@ -831,8 +797,14 @@ namespace Patient_Report_Creation.Controllers
             else
             {
                 // Case 2: No uploaded file — load default XML from the application's web root
-                string defaultXmlPath = Path.Combine(_hostingEnvironment.WebRootPath, "Data", "PatientDetails-2.xml");
-                return new FileStream(defaultXmlPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                string defaultXmlPath = Path.Combine(_hostingEnvironment.WebRootPath, "Data", "PatientDetails.xml");
+                using (var fileStream = new FileStream(defaultXmlPath, FileMode.Open, FileAccess.Read))
+                {
+                    var memoryStream = new MemoryStream();
+                    fileStream.CopyTo(memoryStream);
+                    memoryStream.Position = 0;
+                    return memoryStream;
+                }
             }
         }
 
@@ -880,87 +852,7 @@ namespace Patient_Report_Creation.Controllers
                 // Add the fully populated child object to the list
                 childObjects.Add(childObject);
             }
-        }
-
-        private bool ExecuteMailMergeUsingKnownGroup(
-    WordDocument document,
-    Stream xmlStream,
-    string primaryGroupName)
-        {
-            try
-            {
-                xmlStream.Position = 0;
-
-                XmlDocument xmlDoc = new XmlDocument();
-                xmlDoc.Load(xmlStream);
-
-                XmlNode rootNode = xmlDoc.DocumentElement;
-
-                // Check nested repeating (Vitals, Medications, etc.)
-                bool hasNestedRepeating = ContainsNestedRepeating(rootNode);
-
-                // Convert XML → ExpandoObject
-                ExpandoObject parsedData = new ExpandoObject();
-                GetDataAsExpandoObject(rootNode, ref parsedData);
-                var rootDict = parsedData as IDictionary<string, object>;
-
-                // ✅ IMPORTANT: extract GROUP ITEMS (Patients), not root
-                List<ExpandoObject> groupItems =
-                    NavigateToGroup(
-                        rootDict,
-                        rootNode,
-                        rootNode,
-                        primaryGroupName,
-                        rootNode.LocalName);
-
-                if (groupItems == null || groupItems.Count == 0)
-                {
-                    _logger.LogWarning($"No items found for group '{primaryGroupName}'");
-                    return false;
-                }
-
-                _logger.LogInformation(
-                    $"Found {groupItems.Count} items for group '{primaryGroupName}'");
-
-                MailMergeDataTable table =
-                    new MailMergeDataTable(primaryGroupName, groupItems);
-
-                document.MailMerge.StartAtNewPage = true;
-
-                if (hasNestedRepeating)
-                    document.MailMerge.ExecuteNestedGroup(table);
-                else
-                    document.MailMerge.ExecuteGroup(table);
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to execute mail merge");
-                return false;
-            }
-        }
-
-        private bool ContainsNestedRepeating(XmlNode node)
-        {
-            var elementChildren = node.ChildNodes
-                .OfType<XmlNode>()
-                .Where(n => n.NodeType == XmlNodeType.Element)
-                .ToList();
-
-            var repeating = elementChildren
-                .GroupBy(n => n.LocalName)
-                .Any(g => g.Count() > 1);
-
-            if (repeating)
-                return true;
-
-            foreach (var child in elementChildren)
-                if (ContainsNestedRepeating(child))
-                    return true;
-
-            return false;
-        }     
+        }         
         public IActionResult Index()
         {
             return View();
@@ -975,13 +867,6 @@ namespace Patient_Report_Creation.Controllers
         public IActionResult Error()
         {
             return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
-        }
-        private class XmlMergeStructure
-        {
-            public bool HasRepeating { get; set; }
-            public bool HasNestedRepeating { get; set; }
-            public int RepeatingLevelCount { get; set; }
-            public string PrimaryGroupName { get; set; }
-        }
+        }       
     }
 }
