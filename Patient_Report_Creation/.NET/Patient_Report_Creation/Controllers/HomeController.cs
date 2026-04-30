@@ -138,8 +138,9 @@ namespace Patient_Report_Creation.Controllers
             }
         }      
         /// <summary>
-        /// Processes XML data, detects repeating groups, and performs mail merge on the document.
-        /// Returns true if merge completed successfully, false otherwise.
+        /// SIMPLIFIED: Processes XML data by parsing to ExpandoObject, then analyzes structure 
+        /// to detect repeating groups and performs mail merge.
+        /// No longer needs separate XML traversal for finding repeating groups!
         /// </summary>
         private bool ProcessXmlAndPerformMerge(WordDocument document, Stream xmlStream, string patientId)
         {
@@ -151,19 +152,18 @@ namespace Patient_Report_Creation.Controllers
 
                 XmlNode documentElement = xmlDocument.DocumentElement;
 
-                // Find repeating groups in the XML structure
-                (XmlNode repeatingGroupNode, XmlNode repeatingGroupParent) = FindRepeatingGroupNode(documentElement);
-
-                // Convert XML to dynamic ExpandoObject structure
+                // Convert XML to dynamic ExpandoObject structure (single iteration)
                 ExpandoObject parsedData = new ExpandoObject();
-
                 GetDataAsExpandoObject(documentElement, ref parsedData);
 
-                // Extract and execute appropriate mail merge
-                if (repeatingGroupNode != null)
+                // ✅ SIMPLIFIED: Analyze ExpandoObject structure directly to find repeating groups
+                var groupInfo = AnalyzeExpandoObjectStructure(parsedData, documentElement.LocalName);
+
+                // Execute appropriate mail merge based on detected structure
+                if (groupInfo.HasRepeatingGroup)
                 {
-                    return ExecuteGroupMailMerge(document, repeatingGroupNode, repeatingGroupParent,
-                                                documentElement, parsedData, patientId);
+                    return ExecuteGroupMailMerge(document, groupInfo.GroupName, 
+                                                groupInfo.GroupItems, patientId);
                 }
                 else
                 {
@@ -179,156 +179,185 @@ namespace Patient_Report_Creation.Controllers
         }
 
         /// <summary>
-        /// Finds repeating group node by recursively searching XML structure up to 5 levels deep.
-        /// Returns tuple of (repeatingGroupNode, parentNode) or (null, null) if not found.
+        /// Analyzes ExpandoObject structure to detect repeating groups.
+        /// Returns group information including name and items.
         /// </summary>
-
-        private (XmlNode repeatingGroupNode, XmlNode repeatingGroupParent) FindRepeatingGroupNode(XmlNode documentElement)
-        {
-            // Will hold the first detected repeating node
-            XmlNode repeatingGroupNode = null;
-            // Will hold the parent of the repeating node
-            XmlNode repeatingGroupParent = null;
-
-            // Start recursive depth-first traversal from the document element
-            FindRepeatingGroup(currentNode: documentElement, parentNode: null, ref repeatingGroupNode, ref repeatingGroupParent, maxDepth: 5);
-
-            // Return the result as a tuple
-            return (repeatingGroupNode, repeatingGroupParent);
-        }
-        /// <summary>
-        /// Recursively traverses an XML node tree to locate the first element
-        /// that appears more than once at the same hierarchy level.
-        /// </summary>
-        private bool FindRepeatingGroup(XmlNode currentNode, XmlNode parentNode, ref XmlNode repeatingGroupNode, ref XmlNode repeatingGroupParent, int maxDepth)
-        {
-            if (maxDepth <= 0)
-                return false;
-
-            XmlNode documentRoot = currentNode.OwnerDocument?.DocumentElement;
-
-            // ✅ STEP 1: Detect PRIMARY GROUP at this level
-            foreach (XmlNode child in currentNode.ChildNodes)
-            {
-                if (child.NodeType != XmlNodeType.Element)
-                    continue;
-
-                var sameNamedSiblings =
-                    currentNode.SelectNodes(child.LocalName).Count;
-
-                // Case 1: True repetition (multiple group nodes)
-                if (sameNamedSiblings > 1)
-                {
-                    repeatingGroupNode = child;
-                    repeatingGroupParent = currentNode;
-                    return true;
-                }
-                // Case 2: Single primary group with nested records
-                if (sameNamedSiblings == 1 &&
-                    currentNode == documentRoot &&
-                    ContainsRecordNode(child) &&
-                    !HasRepeatingChildren(child))
-                {
-                    repeatingGroupNode = child;
-                    repeatingGroupParent = currentNode;
-
-                    _logger.LogInformation($"Detected PRIMARY group '{child.LocalName}' under root '{currentNode.LocalName}'");
-
-                    return true;
-                }
-
-            }
-            // ✅ STEP 2: Recurse ONLY if primary group not found
-            foreach (XmlNode child in currentNode.ChildNodes)
-            {
-                if (child.NodeType != XmlNodeType.Element)
-                    continue;
-
-                if (FindRepeatingGroup(child, currentNode, ref repeatingGroupNode, ref repeatingGroupParent, maxDepth - 1))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-        /// <summary>
-        /// Checks recursively whether a node contains at least one record node.
-        /// Used to detect primary groups.
-        /// </summary>
-        private bool ContainsRecordNode(XmlNode node)
-        {
-            // Iterate through all child nodes of the current XML node
-            foreach (XmlNode child in node.ChildNodes)
-            {
-                // Skip non-element nodes such as text, comments, or whitespace
-                if (child.NodeType != XmlNodeType.Element)
-                    continue;
-                // Check whether the current element qualifies as a record node
-                if (IsRecordNode(child))
-                    return true;
-                // Recursively check child elements for record nodes
-                if (ContainsRecordNode(child))
-                    return true;
-            }
-            // No record node found at this level or in any descendants
-            return false;
-        }
-        /// <summary>
-        /// Determines whether the node represents a single record
-        /// (i.e., its children are fields, not other complex elements).
-        /// Example: Component, Vital, Medication
-        /// </summary>
-        private bool IsRecordNode(XmlNode node)
-        {
-            var elementChildren = node.ChildNodes
-                .OfType<XmlNode>()
-                .Where(n => n.NodeType == XmlNodeType.Element)
-                .ToList();
-
-            if (elementChildren.Count == 0)
-                return false;
-
-            // Record node = children contain only text (no nested elements)
-            return elementChildren.All(c =>
-                !c.ChildNodes
-                    .OfType<XmlNode>()
-                    .Any(n => n.NodeType == XmlNodeType.Element));
-        }
-        /// <summary>
-        /// Checks whether the given XML node has any child elements
-        /// that repeat at the same hierarchy level.
-        /// </summary>
-        private bool HasRepeatingChildren(XmlNode node)
-        {
-            // Collect only ELEMENT child nodes
-            // Group child elements by their LocalName
-            var names = node.ChildNodes
-                .OfType<XmlNode>()
-                .Where(n => n.NodeType == XmlNodeType.Element)
-                .GroupBy(n => n.LocalName);
-            // Check whether ANY group has more than one element.
-            // If yes, this node already contains a real repeating group
-            return names.Any(g => g.Count() > 1);
-        }
-
-
-        /// <summary>
-        /// Executes mail merge for documents with repeating groups (nested, grouped, or single record).
-        /// </summary>
-        private bool ExecuteGroupMailMerge(WordDocument document, XmlNode repeatingGroupNode,
-                                           XmlNode repeatingGroupParent, XmlNode documentElement, ExpandoObject parsedData, string patientId)
+        private (bool HasRepeatingGroup, string GroupName, List<ExpandoObject> GroupItems) 
+            AnalyzeExpandoObjectStructure(ExpandoObject parsedData, string rootName)
         {
             try
             {
-                string groupName = repeatingGroupNode.LocalName;
-                string parentNodeName = repeatingGroupParent.LocalName;
-                string documentRootName = documentElement.LocalName;
-
                 var rootDict = parsedData as IDictionary<string, object>;
-                List<ExpandoObject> groupItems = NavigateToGroup(rootDict, documentElement,
-                                                                 repeatingGroupParent, groupName, documentRootName);
+                
+                // Navigate to the root element content
+                if (!rootDict.ContainsKey(rootName))
+                {
+                    _logger.LogWarning($"Root element '{rootName}' not found in parsed data");
+                    return (false, null, null);
+                }
 
+                var rootValue = rootDict[rootName];
+                if (!(rootValue is List<ExpandoObject> rootList) || rootList.Count == 0)
+                {
+                    _logger.LogWarning("Invalid root structure in parsed data");
+                    return (false, null, null);
+                }
+
+                // Analyze the structure starting from root content
+                var rootContent = rootList[0] as IDictionary<string, object>;
+                var groupInfo = FindRepeatingGroupInExpando(rootContent, new List<string> { rootName });
+
+                if (groupInfo.HasRepeatingGroup)
+                {
+                    _logger.LogInformation($"Detected repeating group '{groupInfo.GroupName}' with {groupInfo.GroupItems.Count} items at path: {string.Join(" → ", groupInfo.Path)}");
+
+                    return (
+                        groupInfo.HasRepeatingGroup,
+                        groupInfo.GroupName,
+                        groupInfo.GroupItems
+                    );
+
+                }
+
+                _logger.LogInformation("No repeating groups detected - will use simple mail merge");
+                return (false, null, null);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error analyzing ExpandoObject structure");
+                return (false, null, null);
+            }
+        }
+
+        /// <summary>
+        /// Recursively searches ExpandoObject to find repeating groups.
+        /// FIXED: Properly detects primary groups (e.g., Patients) before finding nested groups (e.g., Vitals)
+        /// </summary>
+        private (bool HasRepeatingGroup, string GroupName, List<ExpandoObject> GroupItems, List<string> Path) 
+            FindRepeatingGroupInExpando(IDictionary<string, object> currentDict, List<string> currentPath, int depth = 0)
+        {
+            if (currentDict == null)
+                return (false, null, null, null);
+
+            // STEP 1: Check for TRUE repeating groups (multiple items at this level)
+            foreach (var kvp in currentDict)
+            {
+                if (kvp.Value is List<ExpandoObject> list && list.Count > 1)
+                {
+                    // Found a list with multiple items - this is a repeating group!
+                    var path = new List<string>(currentPath) { kvp.Key };
+                    return (true, kvp.Key, list, path);
+                }
+            }
+
+            // STEP 2: Check for PRIMARY group (single item that should be treated as main group)
+            // CRITICAL: Detect this BEFORE recursing to avoid finding nested groups first
+            // Example: Patients (1 item) with nested Vitals (multiple items) → Patients is the primary group
+            foreach (var kvp in currentDict)
+            {
+                if (kvp.Value is List<ExpandoObject> list && list.Count == 1)
+                {
+                    var singleItem = list[0] as IDictionary<string, object>;
+                    
+                    if (singleItem != null && HasOwnScalarFields(singleItem) && IsPrimaryGroup(singleItem, kvp.Key, depth))
+                    {
+                        // This single-item list IS the primary group
+                        var path = new List<string>(currentPath) { kvp.Key };
+                        _logger.LogInformation($"Detected PRIMARY group '{kvp.Key}' at depth {depth} (single record with nested data)");
+                        return (true, kvp.Key, list, path);
+                    }
+                }
+            }
+
+            // STEP 3: Recurse into nested structures ONLY if no primary group found at this level
+            foreach (var kvp in currentDict)
+            {
+                if (kvp.Value is List<ExpandoObject> list && list.Count > 0)
+                {
+                    var firstItem = list[0] as IDictionary<string, object>;
+                    if (firstItem != null)
+                    {
+                        var childPath = new List<string>(currentPath) { kvp.Key };
+                        var result = FindRepeatingGroupInExpando(firstItem, childPath, depth + 1);
+                        
+                        if (result.HasRepeatingGroup)
+                            return result;
+                    }
+                }
+            }
+
+            return (false, null, null, null);
+        }
+
+        /// <summary>
+        /// FIXED: Determines if a single-item list represents a PRIMARY group.
+        /// Primary group = main data container that may have nested repeating child records.
+        /// Example: Patients (primary) contains Vitals/Medications (nested children)
+        /// </summary>
+        private bool IsPrimaryGroup(IDictionary<string, object> singleItem, string groupName, int depth)
+        {
+            if (singleItem == null)
+                return false;
+            // Number of direct scalar fields (e.g., Name, ID, Date, etc.)
+            int stringFieldCount = 0;
+            // Number of nested lists (e.g., Vitals, Medications, Components)
+            int nestedListCount = 0;
+            // Number of nested lists that contain MORE THAN ONE item
+            // (i.e., true repeating child records)
+            int multiItemListCount = 0;
+            // Analyze the structure of this single record
+            foreach (var kvp in singleItem)
+            {
+                if (kvp.Value is string)
+                {
+                    // Found a scalar data field
+                    stringFieldCount++;
+                }
+                else if (kvp.Value is List<ExpandoObject> childList)
+                {
+                    // Found a nested collection
+                    nestedListCount++;
+                    // If the nested collection repeats, track it
+                    if (childList.Count > 1)
+                    {
+                        multiItemListCount++;
+                    }
+                }
+            }
+
+            // ✅ RULE 1: TRUE primary record (has fields AND nested data)
+            // Example: Patient with Vitals / Medications
+            if (stringFieldCount > 0 && nestedListCount > 0)
+            {
+                return true;
+            }
+
+            // ✅ RULE 2: Single wrapper that owns repeating children (root-level)
+            // Example: Root → Patients → Patient[]
+            if (stringFieldCount == 0 && multiItemListCount > 0 && depth <= 1)
+            {
+                return true;
+            }
+
+            // Flat, scalar-only object (Validator case)
+            return false;
+        }
+        private bool HasOwnScalarFields(IDictionary<string, object> dict)
+        {
+            // A PRIMARY group must have at least one scalar field
+            return dict.Values.Any(v => v is string && !string.IsNullOrWhiteSpace(v.ToString()));
+        }
+
+        /// <summary>
+        /// ULTRA-SIMPLIFIED: Executes mail merge with pre-analyzed group data.
+        /// No XML traversal, no navigation paths - just use the data we already have!
+        /// </summary>
+        private bool ExecuteGroupMailMerge(WordDocument document, string groupName, 
+                                           List<ExpandoObject> groupItems, string patientId)
+        {
+            try
+            {
+                // Filter by PatientID if selective report requested
                 if (!string.IsNullOrWhiteSpace(patientId))
                 {
                     groupItems = groupItems
@@ -338,7 +367,7 @@ namespace Patient_Report_Creation.Controllers
 
                             if (dict == null) return false;
 
-                            // Match PatientID / MRN (same logic as XML version)
+                            // Match PatientID / MRN
                             if (dict.ContainsKey("PatientID"))
                                 return dict["PatientID"]?.ToString()
                                     .Equals(patientId, StringComparison.OrdinalIgnoreCase) == true;
@@ -350,15 +379,18 @@ namespace Patient_Report_Creation.Controllers
                             return false;
                         })
                         .ToList();
+
+                    // Validate filtered results
+                    if (groupItems == null || groupItems.Count == 0)
+                    {
+                        string message = $"No records found for Patient ID: {patientId}";
+                        _logger.LogWarning(message);
+                        ViewBag.Message = message;
+                        return false;
+                    }
                 }
 
-                if (groupItems == null || groupItems.Count == 0)
-                {
-                    _logger.LogWarning($"No items found in repeating group '{groupName}'");
-                    return false;
-                }
-
-                _logger.LogInformation($"Successfully found {groupItems.Count} items in repeating group '{groupName}'");
+                _logger.LogInformation($"Processing {groupItems.Count} items in group '{groupName}'");
 
                 // Determine merge strategy based on data structure
                 bool hasNestedGroups = DetectNestedGroups(groupItems);
@@ -366,25 +398,29 @@ namespace Patient_Report_Creation.Controllers
 
                 MailMergeDataTable dataTable = new MailMergeDataTable(groupName, groupItems);
 
-                // Execute appropriate mail merge
+                // Execute appropriate mail merge based on data structure
                 if (hasNestedGroups)
                 {
                     document.MailMerge.StartAtNewPage = true;
                     document.MailMerge.ExecuteNestedGroup(dataTable);
+                    _logger.LogInformation($"Executed nested group mail merge for '{groupName}'");
                 }
                 else if (hasMultipleRecords)
                 {
                     document.MailMerge.StartAtNewPage = true;
                     document.MailMerge.ExecuteGroup(dataTable);
+                    _logger.LogInformation($"Executed group mail merge for {groupItems.Count} records");
                 }
                 else
                 {
+                    // Single record - simple merge
                     var firstItem = groupItems[0] as IDictionary<string, object>;
                     string[] fieldNames = firstItem.Keys.ToArray();
                     string[] fieldValues = firstItem.Values
                         .Select(v => v?.ToString() ?? string.Empty)
                         .ToArray();
                     document.MailMerge.Execute(fieldNames, fieldValues);
+                    _logger.LogInformation($"Executed simple mail merge for single record");
                 }
 
                 return true;
@@ -395,91 +431,6 @@ namespace Patient_Report_Creation.Controllers
                 ViewBag.Message = "Error executing group mail merge.";
                 return false;
             }
-        }
-
-        /// <summary>
-        /// Navigates through nested ExpandoObject structure to locate repeating group items.
-        /// </summary>
-        private List<ExpandoObject> NavigateToGroup(IDictionary<string, object> rootDict, XmlNode documentElement,
-                                                    XmlNode repeatingGroupParent, string groupName, string documentRootName)
-        {
-            try
-            {
-                // Build complete navigation path from root to repeating group
-                List<string> navigationPath = BuildNavigationPath(documentElement, repeatingGroupParent, groupName, documentRootName);
-                _logger.LogInformation($"Navigation path: {string.Join(" → ", navigationPath)}");
-
-                // Navigate through the path to find the group items
-                IDictionary<string, object> current = rootDict;
-                foreach (var nodeName in navigationPath)
-                {
-                    if (!current.ContainsKey(nodeName))
-                    {
-                        _logger.LogWarning($"Navigation failed: '{nodeName}' not found in current path.");
-                        return null;
-                    }
-
-                    var value = current[nodeName];
-
-                    if (value is List<ExpandoObject> list)
-                    {
-                        if (list.Count == 0)
-                        {
-                            _logger.LogWarning($"Empty list found at '{nodeName}'.");
-                            return null;
-                        }
-
-                        // If this is the last item in path, we've reached the repeating group
-                        if (nodeName == navigationPath.Last())
-                            return list;
-
-                        // Otherwise navigate into the first item and continue
-                        current = list[0] as IDictionary<string, object>;
-                    }
-                    else
-                    {
-                        _logger.LogWarning($"Expected list at '{nodeName}', found: {value?.GetType().Name}");
-                        return null;
-                    }
-                }
-
-                return null;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to navigate to group");
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// Builds the navigation path from document root to repeating group.
-        /// </summary>
-        private List<string> BuildNavigationPath(XmlNode documentElement, XmlNode repeatingGroupParent,
-                                                 string groupName, string documentRootName)
-        {
-            List<string> navigationPath = new List<string>();
-            Stack<string> pathStack = new Stack<string>();
-
-            // Trace back from repeating group parent to document root
-            XmlNode currentXmlNode = repeatingGroupParent;
-            while (currentXmlNode != null && currentXmlNode != documentElement)
-            {
-                pathStack.Push(currentXmlNode.LocalName);
-                currentXmlNode = currentXmlNode.ParentNode;
-            }
-
-            // Start path from document root
-            navigationPath.Add(documentRootName);
-
-            // Add intermediate levels in correct order
-            while (pathStack.Count > 0)
-                navigationPath.Add(pathStack.Pop());
-
-            // Add the repeating group name
-            navigationPath.Add(groupName);
-
-            return navigationPath;
         }
 
         /// <summary>
