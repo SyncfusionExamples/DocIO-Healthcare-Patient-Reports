@@ -120,7 +120,7 @@ namespace Patient_Report_Creation.Controllers
                     //Determine whether PatientID should be used
                     string effectivePatientId = reportType == "selective" ? patientId?.Trim() : null;
                     // Generate report for all records
-                    mergeSuccess = ProcessXmlAndPerformMerge(document, xmlStream,patientId);
+                    mergeSuccess = ProcessXmlAndPerformMerge(document, xmlStream, effectivePatientId);
                     
                     if (!mergeSuccess)
                         return View("Index");
