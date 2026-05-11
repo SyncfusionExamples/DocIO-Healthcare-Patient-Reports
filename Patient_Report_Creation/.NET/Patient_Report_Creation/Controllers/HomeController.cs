@@ -92,9 +92,9 @@ namespace Patient_Report_Creation.Controllers
             {
                 // Load default file from wwwroot\Data\
                 string defaultFilePath = Path.Combine(_hostingEnvironment.WebRootPath, "Data", "Template.docx");
-                using (var fileStream = new FileStream(defaultFilePath, FileMode.Open, FileAccess.Read))
+                using (FileStream fileStream = new FileStream(defaultFilePath, FileMode.Open, FileAccess.Read))
                 {
-                    var memoryStream = new MemoryStream();
+                    MemoryStream memoryStream = new MemoryStream();
                     fileStream.CopyTo(memoryStream);
                     memoryStream.Position = 0;
                     return memoryStream;
@@ -151,15 +151,15 @@ namespace Patient_Report_Creation.Controllers
                 xmlStream.Position = 0;
 
                 // Load as XmlDocument (not XDocument) to work with your existing method
-                var xmlDoc = new XmlDocument();
+                XmlDocument xmlDoc = new XmlDocument();
                 xmlDoc.Load(xmlStream);
                 // Get the root element of the XML document
-                var rootNode = xmlDoc.DocumentElement;
-                var rootName = rootNode.Name;
+                XmlElement rootNode = xmlDoc.DocumentElement;
+                string rootName = rootNode.Name;
 
                 // Convert XML structure into a dynamic ExpandoObject
                 // This allows flexible property access without rigid classes
-                var parsedData = new ExpandoObject();
+                ExpandoObject parsedData = new ExpandoObject();
                 GetDataAsExpandoObject(rootNode, ref parsedData);
 
                 // Analyze the parsed structure to:
@@ -167,7 +167,7 @@ namespace Patient_Report_Creation.Controllers
                 // - Identify the group name
                 // - Extract group items
                 // - Check for nested repeating groups
-                var (hasGroup, groupName, groupItems, hasNestedGroups) =
+                (bool hasGroup, string groupName, List<ExpandoObject> groupItems, bool hasNestedGroups) =
                     AnalyzeExpandoObjectStructure(parsedData, rootName,document);
                 // If no repeating group is found, perform a simple mail merge
                 if (!hasGroup)
@@ -203,7 +203,7 @@ namespace Patient_Report_Creation.Controllers
             try
             {
                 // Convert ExpandoObject into dictionary for key-based access
-                var rootDict = parsedData as IDictionary<string, object>;
+                IDictionary<string, object> rootDict = parsedData as IDictionary<string, object>;
                 // Validate that the root element exists in parsed data
                 if (!rootDict.ContainsKey(rootName))
                 {
@@ -211,7 +211,7 @@ namespace Patient_Report_Creation.Controllers
                     return (false, null, null, false);
                 }
                 // Extract value corresponding to the root element
-                var rootValue = rootDict[rootName];
+                object rootValue = rootDict[rootName];
                 // Ensure the root value is a non-empty list of ExpandoObjects
                 // This represents structured XML data suitable for processing
                 if (!(rootValue is List<ExpandoObject> rootList) || rootList.Count == 0)
@@ -223,7 +223,7 @@ namespace Patient_Report_Creation.Controllers
                 // This is used later to validate detected XML groups
                 string[] templateGroupNames = document.MailMerge.GetMergeGroupNames();
                 // Identify the main repeating group within the XML structure
-                var result = FindMainDataGroup(rootList, rootName);
+                GroupSearchResult result = FindMainDataGroup(rootList, rootName);
 
                 if (result.Found)
                 {
@@ -284,7 +284,7 @@ namespace Patient_Report_Creation.Controllers
             if (itemList.Count == 1)
             {
                 // Convert the single item into a dictionary for analysis
-                var singleItem = itemList[0] as IDictionary<string, object>;
+                IDictionary<string, object> singleItem = itemList[0] as IDictionary<string, object>;
                 if (singleItem != null)
                 {
 
@@ -292,14 +292,13 @@ namespace Patient_Report_Creation.Controllers
                     // - Does it have simple fields?
                     // - Does it contain repeating child groups?
                     // - Does it contain nested lists?
-                    var analysis = AnalyzeItemStructure(singleItem);
+                    ItemAnalysis analysis = AnalyzeItemStructure(singleItem);
 
                     // CASE 1: HIERARCHICAL PARENT
                     // Has simple fields AND repeating child groups
                     // Example: Patient → Visits[], Medications[]
-                    if (analysis.HasSimpleFields && analysis.HasRepeatingGroups)
-                    {
-                        _logger.LogInformation($"✓ Found HIERARCHICAL parent '{groupName}' with {analysis.SimpleFieldCount} fields and {analysis.RepeatingGroupCount} repeating child(s)");
+                    if (analysis.HasSimpleFields && analysis.HasRepeatingChildren)
+                    {                      
                         return new GroupSearchResult
                         {
                             Found = true,
@@ -310,9 +309,8 @@ namespace Patient_Report_Creation.Controllers
                     // CASE 2: SIMPLE DATA RECORD
                     // Has only simple fields and no repeating children
                     // Example: Single object with basic properties
-                    if (analysis.HasSimpleFields && !analysis.HasRepeatingGroups)
+                    if (analysis.HasSimpleFields && !analysis.HasRepeatingChildren)
                     {
-                        _logger.LogInformation($"✓ Found simple data record '{groupName}' with {analysis.SimpleFieldCount} fields");
                         return new GroupSearchResult
                         {
                             Found = true,
@@ -325,15 +323,15 @@ namespace Patient_Report_Creation.Controllers
                     // No direct fields, only contains nested lists
                     // Example: <Root><Patients>...</Patients></Root>
                     // → must recurse into children to find real group
-                    if (!analysis.HasSimpleFields && analysis.HasNestedLists)
+                    if (!analysis.HasSimpleFields && analysis.HasChildGroups)
                     {
                         _logger.LogInformation($"'{groupName}' is a wrapper - checking children...");
                         // Recursively inspect each child list
-                        foreach (var kvp in singleItem)
+                        foreach (KeyValuePair<string, object> kvp in singleItem)
                         {
                             if (kvp.Value is List<ExpandoObject> childList)
                             {
-                                var childResult = FindMainDataGroup(childList, kvp.Key);
+                                GroupSearchResult childResult = FindMainDataGroup(childList, kvp.Key);
                                 // If a valid group is found in children, return immediately
                                 if (childResult.Found)
                                     return childResult;
@@ -356,11 +354,11 @@ namespace Patient_Report_Creation.Controllers
                 return false;
 
             // Check the first item (structure should be consistent across all items)
-            var firstItem = groupItems[0] as IDictionary<string, object>;
+            IDictionary<string, object> firstItem = groupItems[0] as IDictionary<string, object>;
             if (firstItem == null)
                 return false;
 
-            foreach (var kvp in firstItem)
+            foreach (KeyValuePair<string, object> kvp in firstItem)
             {
                 // Found a nested list with multiple items = nested repeating group
                 if (kvp.Value is List<ExpandoObject> nestedList && nestedList.Count > 1)
@@ -378,35 +376,31 @@ namespace Patient_Report_Creation.Controllers
         /// </summary>
         private ItemAnalysis AnalyzeItemStructure(IDictionary<string, object> item)
         {
-            var analysis = new ItemAnalysis();
+            ItemAnalysis analysis = new ItemAnalysis();
 
-            foreach (var kvp in item)
+            foreach (KeyValuePair<string, object> kvp in item)
             {
                 if (kvp.Value is string)
                 {
-                    analysis.SimpleFieldCount++;
+                    // Decision 1: Does item have its own data fields?
+                    // Rule: If we found at least 1 simple field, it has data
+                    analysis.HasSimpleFields = true;
                 }
                 else if (kvp.Value is List<ExpandoObject> childList)
                 {
-                    analysis.NestedListCount++;
+                    // Decision 2: Does item own repeating sub-groups?
+                    // Rule: If we found at least 1 repeating group, it has repeating children
+                    analysis.HasChildGroups = true;
 
                     // COUNT 2: Is this a repeating group (multiple items)?
                     if (childList.Count > 1)
                     {
-                        analysis.RepeatingGroupCount++;
+                        // Decision 3: Does item have ANY nested structure?
+                        // Rule: If we found at least 1 nested list (repeating or single), it has nesting
+                        analysis.HasRepeatingChildren = true;
                     }
                 }
             }
-            // Decision 1: Does item have its own data fields?
-            // Rule: If we found at least 1 simple field, it has data
-            analysis.HasSimpleFields = analysis.SimpleFieldCount > 0;
-            // Decision 2: Does item own repeating sub-groups?
-            // Rule: If we found at least 1 repeating group, it has repeating children
-            analysis.HasRepeatingGroups = analysis.RepeatingGroupCount > 0;
-            // Decision 3: Does item have ANY nested structure?
-            // Rule: If we found at least 1 nested list (repeating or single), it has nesting
-            analysis.HasNestedLists = analysis.NestedListCount > 0;
-
             return analysis;
         }
         /// <summary>
@@ -430,7 +424,7 @@ namespace Patient_Report_Creation.Controllers
                         .Where(item =>
                         {
                             // Convert item to dictionary for field access
-                            var dict = item as IDictionary<string, object>;
+                            IDictionary<string, object> dict = item as IDictionary<string, object>;
                             if (dict == null) return false;
 
                             // Match PatientID field (case-insensitive)
@@ -457,34 +451,21 @@ namespace Patient_Report_Creation.Controllers
                 }
 
                 _logger.LogInformation($"Processing {groupItems.Count} items in group '{groupName}'");
-                // Determine if there are multiple records
-                bool hasMultipleRecords = groupItems.Count > 1;
                 // Create a MailMergeDataTable required for grouped mail merge execution
                 MailMergeDataTable dataTable = new MailMergeDataTable(groupName, groupItems);
-
-                // Execute appropriate mail merge based on data structure
+                //Execute nested group mail merge
                 if (hasNestedGroups)
                 {
                     document.MailMerge.StartAtNewPage = true;
                     document.MailMerge.ExecuteNestedGroup(dataTable);
                     _logger.LogInformation($"Executed nested group mail merge for '{groupName}'");
                 }
-                else if (hasMultipleRecords)
-                {
-                    document.MailMerge.StartAtNewPage = true;
-                    document.MailMerge.ExecuteGroup(dataTable);
-                    _logger.LogInformation($"Executed group mail merge for {groupItems.Count} records");
-                }
                 else
                 {
-                    // Single record - simple merge
-                    var firstItem = groupItems[0] as IDictionary<string, object>;
-                    string[] fieldNames = firstItem.Keys.ToArray();
-                    string[] fieldValues = firstItem.Values
-                        .Select(v => v?.ToString() ?? string.Empty)
-                        .ToArray();
-                    document.MailMerge.Execute(fieldNames, fieldValues);
-                    _logger.LogInformation($"Executed simple mail merge for single record");
+                    // Execute group merge for both single and multiple records
+                    document.MailMerge.StartAtNewPage = groupItems.Count > 1;
+                    document.MailMerge.ExecuteGroup(dataTable);
+                    _logger.LogInformation($"Executed group mail merge for {groupItems.Count} record(s) in '{groupName}'");
                 }
                 // Create a MailMergeDataTable required for grouped mail merge execution
                 return true;
@@ -505,12 +486,12 @@ namespace Patient_Report_Creation.Controllers
         private bool DetectNestedGroups(List<ExpandoObject> groupItems)
         {
             // Iterate through each primary group item
-            foreach (var item in groupItems)
+            foreach (ExpandoObject item in groupItems)
             {
                 // Treat the group item as a dictionary for property access
-                var itemDict = item as IDictionary<string, object>;
+                IDictionary<string, object> itemDict = item as IDictionary<string, object>;
                 // Examine each value inside the group item
-                foreach (var value in itemDict.Values)
+                foreach (object value in itemDict.Values)
                 {
                     // Identify child collections represented as lists of ExpandoObject
                     if (value is List<ExpandoObject> childList)
@@ -523,7 +504,7 @@ namespace Patient_Report_Creation.Controllers
                         // check whether that item itself contains nested lists
                         if (childList.Count == 1)
                         {
-                            var nestedItem = childList[0] as IDictionary<string, object>;
+                            IDictionary<string, object> nestedItem = childList[0] as IDictionary<string, object>;
 
                             // If the nested item contains any list values,
                             // a deeper nested group exists
@@ -546,7 +527,7 @@ namespace Patient_Report_Creation.Controllers
             try
             {
                 // Convert the parsed ExpandoObject into a dictionary
-                var rootDict = parsedData as IDictionary<string, object>;
+                IDictionary<string, object> rootDict = parsedData as IDictionary<string, object>;
                 // Get the XML document root element name
                 string documentRootName = documentElement.LocalName;
                 // Validate that the parsed data contains the XML root element
@@ -557,7 +538,7 @@ namespace Patient_Report_Creation.Controllers
                 }
                 // Expect the root element to be represented as a list
                 // (even if it contains only one item)
-                var documentRootList = rootDict[documentRootName] as List<ExpandoObject>;
+                List<ExpandoObject> documentRootList = rootDict[documentRootName] as List<ExpandoObject>;
                 if (documentRootList == null || documentRootList.Count == 0)
                 {
                     ViewBag.Message = "Invalid XML structure.";
@@ -565,8 +546,8 @@ namespace Patient_Report_Creation.Controllers
                 }
                 // Flatten nested XML structure into name/value field pairs
                 // and capture multi-item lists that are skipped
-                var rootItem = documentRootList[0] as IDictionary<string, object>;
-                var (fields, skippedLists) = FlattenRootFields(rootItem);
+                IDictionary<string, object> rootItem = documentRootList[0] as IDictionary<string, object>;
+                (Dictionary<string, string> fields, List<string> skippedLists) = FlattenRootFields(rootItem);
 
                 if (fields.Count == 0)
                 {
@@ -606,10 +587,10 @@ namespace Patient_Report_Creation.Controllers
         /// </summary>
         private (Dictionary<string, string>, List<string>) FlattenRootFields(IDictionary<string, object> rootItem)
         {
-            var fields = new Dictionary<string, string>();
-            var skippedLists = new List<string>();
+            Dictionary<string, string> fields = new Dictionary<string, string>();
+            List<string> skippedLists = new List<string>();
 
-            foreach (var kvp in rootItem)
+            foreach (KeyValuePair<string, object> kvp in rootItem)
             {
                 if (kvp.Value is string stringValue)
                 {
@@ -620,10 +601,10 @@ namespace Patient_Report_Creation.Controllers
                     if (list.Count == 1)
                     {
                         // Flatten single-item nested list
-                        var nestedItem = list[0] as IDictionary<string, object>;
+                        IDictionary<string, object> nestedItem = list[0] as IDictionary<string, object>;
                         if (nestedItem != null)
                         {
-                            foreach (var nestedKvp in nestedItem)
+                            foreach (KeyValuePair<string, object> nestedKvp in nestedItem)
                             {
                                 string fieldKey = nestedKvp.Key;
                                 if (fields.ContainsKey(fieldKey))
@@ -724,8 +705,8 @@ namespace Patient_Report_Creation.Controllers
             lastBookmarkPara.AppendBookmarkEnd($"Page_Bookmark_{bookmarkIndex}");
             body.ChildEntities.Add(lastBookmarkPara);
             // Step 4: Create ZIP file and convert each bookmarked section to PDF
-            var zipStream = new MemoryStream();
-            using (var zip = new ZipArchive(zipStream, ZipArchiveMode.Create, leaveOpen: true))
+            MemoryStream zipStream = new MemoryStream();
+            using (ZipArchive zip = new ZipArchive(zipStream, ZipArchiveMode.Create, leaveOpen: true))
             {
                 for (int i = 1; i <= bookmarkIndex; i++)
                 {
@@ -749,8 +730,8 @@ namespace Patient_Report_Creation.Controllers
                             pdfStream.Position = 0;
 
                             // Write PDF into ZIP entry
-                            var entry = zip.CreateEntry($"Document_{i}.pdf", CompressionLevel.Fastest);
-                            using (var entryStream = entry.Open())
+                            ZipArchiveEntry entry = zip.CreateEntry($"Document_{i}.pdf", CompressionLevel.Fastest);
+                            using (Stream entryStream = entry.Open())
                             {
                                 pdfStream.CopyTo(entryStream);
                             }
@@ -813,36 +794,15 @@ namespace Patient_Report_Creation.Controllers
             {
                 // Case 2: No uploaded file — load default XML from the application's web root
                 string defaultXmlPath = Path.Combine(_hostingEnvironment.WebRootPath, "Data", "PatientDetails.xml");
-                using (var fileStream = new FileStream(defaultXmlPath, FileMode.Open, FileAccess.Read))
+                using (FileStream fileStream = new FileStream(defaultXmlPath, FileMode.Open, FileAccess.Read))
                 {
-                    var memoryStream = new MemoryStream();
+                    MemoryStream memoryStream = new MemoryStream();
                     fileStream.CopyTo(memoryStream);
                     memoryStream.Position = 0;
                     return memoryStream;
                 }
             }
         }
-        /// <summary>
-        /// Wrapper method to use your existing GetDataAsExpandoObject method
-        /// </summary>
-        private ExpandoObject ParseXmlToExpandoObject(XElement xElement)
-        {
-            // Convert XElement to XmlNode (required by your existing method)
-            var xmlDoc = new XmlDocument();
-            using (var xmlReader = xElement.CreateReader())
-            {
-                xmlDoc.Load(xmlReader);
-            }
-
-            var xmlNode = xmlDoc.DocumentElement;
-            var expandoObject = new ExpandoObject();
-
-            // Use your existing method
-            GetDataAsExpandoObject(xmlNode, ref expandoObject);
-
-            return expandoObject;
-        }
-
         /// <summary>
         /// Gets the data as ExpandoObject - exact match to Syncfusion reference
         /// </summary>
@@ -918,12 +878,9 @@ namespace Patient_Report_Creation.Controllers
 
         private class ItemAnalysis
         {
-            public int SimpleFieldCount { get; set; }
-            public int NestedListCount { get; set; }
-            public int RepeatingGroupCount { get; set; }
             public bool HasSimpleFields { get; set; }
-            public bool HasRepeatingGroups { get; set; }
-            public bool HasNestedLists { get; set; }
+            public bool HasRepeatingChildren { get; set; }
+            public bool HasChildGroups { get; set; }
         }
     }
 }
