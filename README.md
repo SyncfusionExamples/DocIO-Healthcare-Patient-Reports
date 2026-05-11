@@ -244,6 +244,29 @@ The application automatically detects the XML structure and chooses the appropri
 2. **Group Merge** – Used when XML contains multiple records at the same level
 3. **Simple Merge** – Used for flat key-value XML data (single record)
 
+### Dynamic XML Structure Handling
+
+This application intelligently processes **dynamic XML files** with varying structures:
+
+**Processing Approach:**
+1. **XML Parsing** – Converts uploaded XML into structured data objects (ExpandoObject)
+2. **Structure Analysis** – Automatically detects simple fields, repeating groups, and nested hierarchies
+3. **Template Validation** – Validates detected groups against Word template merge fields using `document.MailMerge.GetMergeGroupNames()`
+4. **Smart Routing** – Routes to appropriate merge strategy based on detected structure:
+   - Simple merge for flat data
+   - Group merge for repeating records
+   - Nested merge for hierarchical data
+
+**Supported Scenarios:**
+- Single-level XML with simple key-value pairs
+- Multiple records with repeating groups
+- Multi-level nested structures (Patient → Diagnoses → Medications)
+- Wrapper elements (automatically detected and handled)
+- Mixed structures with both simple fields and nested groups
+
+**Limitations:**
+While this sample handles most common XML structures, highly complex or unusual XML formats may require template and data structure alignment. Ensure your Word template merge fields match the XML element names and structure for optimal results.
+
 ### Page Break Splitting
 
 When "Multiple PDF Files" is selected, the application:
