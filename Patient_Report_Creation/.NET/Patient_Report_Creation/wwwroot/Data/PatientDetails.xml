@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PatientDetails>
+    <Patients>
+      <PatientName>John Doe</PatientName>
+      <PatientID>MRN001</PatientID>
+      <PatientDOB>1985-06-15</PatientDOB>
+      <Gender>Male</Gender>
+      <BloodGroup>O+</BloodGroup>
+      <PatientContact>555-1001</PatientContact>
+      <EncounterAdmitDate>2025-03-20</EncounterAdmitDate>
+      <EncounterDischargeDate>2025-03-24</EncounterDischargeDate>
+      <WardRoomNumber>Ward 3 / Room 210</WardRoomNumber>
+      <EncounterID>ENC-001</EncounterID>
+      <ProviderName>Dr. Smith</ProviderName>
+      <Department>Internal Medicine</Department>
+      <Diagnosis>Acute Bronchitis</Diagnosis>
+      <ICDCode>J20.9</ICDCode>
+	  <HospitalCourse>Patient admitted with respiratory symptoms and treated with antibiotics and bronchodilators. Clinical condition improved gradually duringstay</HospitalCourse> <Procedures>Chest X-Ray, Complete Blood Count (CBC)</Procedures>
+      <Vitals>
+          <Name>Blood Pressure</Name>
+          <Value>120/80</Value>
+          <Unit>mmHg</Unit>
+          <Time>08:00 AM</Time>
+      </Vitals>
+	  <Vitals>
+          <Name>Heart Rate</Name>
+          <Value>78</Value>
+          <Unit>bpm</Unit>
+          <Time>08:05 AM</Time>
+      </Vitals>
+      <Medications>
+          <Drug>Amoxicillin</Drug>
+          <Dose>500 mg</Dose>
+          <Route>Oral</Route>
+          <Freq>Twice Daily</Freq>
+          <StartDate>2025-03-20</StartDate>
+      </Medications>
+      <Medications>
+          <Drug>Salbutamol</Drug>
+          <Dose>2 puffs</Dose>
+          <Route>Inhalation</Route>
+          <Freq>As Needed</Freq>
+          <StartDate>2025-03-21</StartDate>
+      </Medications>
+      <DischargeInstructions>Continue medications. Follow up in 2 weeks.</DischargeInstructions> 
+	  <FollowUpDate>2025-04-05</FollowUpDate>
+      <FollowUpDoctor>Dr. Emily Carter</FollowUpDoctor>
+      <FollowUpNotes>Follow up in pulmonology clinic. Seek care if symptoms worsen.</FollowUpNotes>
+      <ProviderDesignation>Consultant Physician</ProviderDesignation>
+	  <ProviderDepartment>General Medicine</ProviderDepartment>
+      <SignatureDate>2025-03-24</SignatureDate>
+    </Patients>
+    <Patients>
+      <PatientName>Jane Miller</PatientName>
+      <PatientID>MRN002</PatientID>
+      <PatientDOB>1990-09-12</PatientDOB>
+      <Gender>Female</Gender>
+      <BloodGroup>A+</BloodGroup>
+      <PatientContact>555-1002</PatientContact>
+      <EncounterAdmitDate>2025-03-18</EncounterAdmitDate>
+      <EncounterDischargeDate>2025-03-22</EncounterDischargeDate>
+      <WardRoomNumber>Ward 5 / Room 312</WardRoomNumber>
+      <EncounterID>ENC-002</EncounterID>
+      <ProviderName>Dr. Adams</ProviderName>
+      <Department>Pulmonology</Department>
+      <Diagnosis>Asthma Exacerbation</Diagnosis>
+      <ICDCode>J45.901</ICDCode>
+	  <HospitalCourse>Patient was admitted for asthma exacerbation. Treated with systemic steroids and bronchodilators with good clinical response and symptom resolution.</HospitalCourse> 
+	  <Procedures>Pulmonary Function Test, Nebulization Therapy</Procedures>
+      <Vitals>
+          <Name>Oxygen Saturation</Name>
+          <Value>95</Value>
+          <Unit>%</Unit>
+          <Time>09:00 AM</Time>
+      </Vitals>
+      <Medications>
+          <Drug>Prednisone</Drug>
+          <Dose>40 mg</Dose>
+          <Route>Oral</Route>
+          <Freq>Once Daily</Freq>
+          <StartDate>2025-03-18</StartDate>
+      </Medications>
+      <DischargeInstructions>Avoid allergens and continue inhaler therapy.</DischargeInstructions>
+	  <FollowUpDate>2025-04-07</FollowUpDate>
+	  <FollowUpDoctor>Dr. Laura Bennett</FollowUpDoctor>
+      <FollowUpNotes>Follow-up in pulmonary clinic. Patient advised to return immediately if shortness of breath or wheezing recurs.</FollowUpNotes>
+      <ProviderDesignation>Senior Consultant</ProviderDesignation>
+	  <ProviderDepartment>Pulmonology</ProviderDepartment>
+      <SignatureDate>2025-03-22</SignatureDate>
+    </Patients>
+</PatientDetails>
