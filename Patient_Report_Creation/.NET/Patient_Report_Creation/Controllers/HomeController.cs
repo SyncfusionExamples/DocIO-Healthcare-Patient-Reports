@@ -159,11 +159,11 @@ namespace Patient_Report_Creation.Controllers
                 GetDataAsExpandoObject(rootNode, ref parsedData);
 
                 // Find matching group between XML and template
-                (bool found, string groupName, List<ExpandoObject> groupItems, bool isNested) =
+                (string groupName, List<ExpandoObject> groupItems, bool isNested) =
                     FindMatchingGroup(parsedData, rootName, document);
 
                 // No matching group found - perform simple merge
-                if (!found)
+                if (groupName == null)
                 {
                     _logger.LogInformation("No matching group found between XML and template - performing simple mail merge");
                     return ExecuteSimpleMailMerge(document, rootNode, parsedData);
@@ -184,56 +184,47 @@ namespace Patient_Report_Creation.Controllers
         /// Finds matching groups between XML structure and Word template merge groups.
         /// Returns the first matching group found with its items and structure type.
         /// </summary>
-        private (bool Found, string GroupName, List<ExpandoObject> Items, bool IsNested)
+        private (string GroupName, List<ExpandoObject> Items, bool IsNested)
             FindMatchingGroup(ExpandoObject parsedData, string rootName, WordDocument document)
         {
             try
             {
-                // Get all merge group names defined in the Word template
                 string[] templateGroupNames = document.MailMerge.GetMergeGroupNames();
 
                 if (templateGroupNames == null || templateGroupNames.Length == 0)
                 {
                     _logger.LogInformation("No merge groups found in template");
-                    return (false, null, null, false);
+                    return (null, null, false);
                 }
 
                 _logger.LogInformation($"Template contains {templateGroupNames.Length} group(s): {string.Join(", ", templateGroupNames)}");
 
-                // Convert root ExpandoObject to dictionary for iteration
                 IDictionary<string, object> rootDict = parsedData as IDictionary<string, object>;
 
-                if (!rootDict.ContainsKey(rootName))
-                {
-                    _logger.LogWarning($"Root element '{rootName}' not found in XML");
-                    return (false, null, null, false);
-                }
+                // Get root value directly - validation happens in SearchForTemplateGroup
+                object rootValue = rootDict?[rootName];
 
-                // Get root element data
-                object rootValue = rootDict[rootName];
-                if (!(rootValue is List<ExpandoObject> rootList) || rootList.Count == 0)
-                {
-                    _logger.LogWarning("Root element does not contain valid data");
-                    return (false, null, null, false);
-                }
-
-                // Start searching for matching groups
-                return SearchForTemplateGroup(rootList, templateGroupNames, rootName);
+                return SearchForTemplateGroup(rootValue, templateGroupNames, rootName);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error finding matching group: {ex.Message}");
-                return (false, null, null, false);
+                return (null, null, false);
             }
         }
         /// <summary>
         /// Recursively searches through XML structure to find tags matching template group names.
+        /// All validation (type checking, count checking) happens here.
         /// </summary>
-        private (bool Found, string GroupName, List<ExpandoObject> Items, bool IsNested)
-            SearchForTemplateGroup(List<ExpandoObject> itemList, string[] templateGroupNames, string currentTag)
+        private (string GroupName, List<ExpandoObject> Items, bool IsNested)
+            SearchForTemplateGroup(object itemValue, string[] templateGroupNames, string currentTag)
         {
-            if (itemList == null || itemList.Count == 0)
-                return (false, null, null, false);
+            // Unified validation: Check if itemValue is valid List<ExpandoObject>
+            if (!(itemValue is List<ExpandoObject> itemList) || itemList.Count == 0)
+            {
+                _logger.LogDebug($"Tag '{currentTag}' does not contain valid data, skipping.");
+                return (null, null, false);
+            }
 
             // Check if current tag matches any template group
             bool isMatchingGroup = templateGroupNames.Any(g =>
@@ -242,37 +233,27 @@ namespace Patient_Report_Creation.Controllers
             if (isMatchingGroup)
             {
                 _logger.LogInformation($"✓ Found matching group '{currentTag}' with {itemList.Count} item(s)");
-
-                // Determine if this group has nested groups
                 bool hasNested = HasNestedGroups(itemList, templateGroupNames);
-
-                return (true, currentTag, itemList, hasNested);
+                return (currentTag, itemList, hasNested);
             }
 
             // Current tag doesn't match - search children
-            // Take first item to explore structure (all items should have same structure)
-            if (itemList.Count > 0)
+            IDictionary<string, object> firstItem = itemList[0] as IDictionary<string, object>;
+
+            if (firstItem != null)
             {
-                IDictionary<string, object> firstItem = itemList[0] as IDictionary<string, object>;
-
-                if (firstItem != null)
+                foreach (KeyValuePair<string, object> kvp in firstItem)
                 {
-                    // Iterate through each property/tag in the item
-                    foreach (KeyValuePair<string, object> kvp in firstItem)
-                    {
-                        if (kvp.Value is List<ExpandoObject> childList)
-                        {
-                            // Recursively search this child list
-                            (bool Found, string GroupName, List<ExpandoObject> Items, bool IsNested) result = SearchForTemplateGroup(childList, templateGroupNames, kvp.Key);
+                    // Recursively search - pass raw object value
+                    (string GroupName, List<ExpandoObject> Items, bool IsNested) result =
+                        SearchForTemplateGroup(kvp.Value, templateGroupNames, kvp.Key);
 
-                            if (result.Found)
-                                return result;
-                        }
-                    }
+                    if (result.GroupName != null)
+                        return result;
                 }
             }
 
-            return (false, null, null, false);
+            return (null, null, false);
         }
         /// <summary>
         /// Determines if group items contain nested groups that match template group names.
