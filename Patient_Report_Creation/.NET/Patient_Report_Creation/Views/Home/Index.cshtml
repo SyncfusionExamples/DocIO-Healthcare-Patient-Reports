@@ -672,8 +672,9 @@
                             <span>.DOC</span>
                             <span>.DOTX</span>
                             <span>.RTF</span>
+							<span>.HTML</span>
                         </div>
-                        @Html.TextBox("file", null, new { type = "file", accept = ".doc,.docx,.rtf,.dot,.dotm,.dotx,.docm", onchange = "handleFileSelect(this, 'template')" })
+                        @Html.TextBox("file", null, new { type = "file", accept = ".doc,.docx,.rtf,.dot,.dotm,.dotx,.docm,.html", onchange = "handleFileSelect(this, 'template')" })
 
                         <div class="default-file-display" id="default-template">
                             <span class="file-icon">📄</span>

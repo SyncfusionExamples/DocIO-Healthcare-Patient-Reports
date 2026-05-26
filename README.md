@@ -74,7 +74,7 @@ https://localhost:5001
 ### Basic Workflow
 
 1. **Upload Report Template (Optional)**
-   - Upload a Word document (.docx, .doc, .rtf) with mail merge fields
+   - Upload a Word document (.docx, .doc, .rtf, .html) with mail merge fields
    - Or use the default `Template.docx` provided
    - Drag & drop supported
 
